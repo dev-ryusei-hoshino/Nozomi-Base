@@ -1,3 +1,4 @@
+<img alt="thumb" src="https://cdn.ornzora.eu.cc/bc527520-3ff3-4e5f-aadf-1913b55e52ae-upload-1786117255395.jpg" align="center" width="100%"> 
 <h1 align="center">Nozomi-Base (ESM)</h1>
 <p align="center"><b>Nozomi-Base</b> is a ready-to-use and extensible WhatsApp bot base, allowing developers to focus on building features instead of dealing with connection handling, authentication, and other boilerplate setup.</p>
 
@@ -17,7 +18,7 @@ If you are the rightful copyright holder and believe that any content in this re
 
 <h2 align="center">Preview</h2>
 <div align="center" style="display: flex; justify-content: center; align-items: center; gap: 10px">
-  <img alt="preview" src="https://cdn.ornzora.eu.cc/f73a503e-4a1f-4010-8b61-40006a01e5a1-upload-1786112811519.jpg" width="50%" style="border-radius: 15px">
+  <img alt="preview" src="https://cdn.ornzora.eu.cc/f73a503e-4a1f-4010-8b61-40006a01e5a1-upload-1786112811519.jpg" width="100%" style="border-radius: 15px">
 </div>
 
 <br>

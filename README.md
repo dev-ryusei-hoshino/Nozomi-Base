@@ -41,11 +41,20 @@ If you are the rightful copyright holder and believe that any content in this re
 ```
 
 ## > Quick Start
-
 ```bash
 git clone https://github.com/dev-ryusei-hoshino/Nozomi-Base
 cd Nozomi-Base
 npm install
+npm start
+```
+<br>
+
+For android/Termux:
+```bash
+git clone https://github.com/dev-ryusei-hoshino/Nozomi-Base
+cd Nozomi-Base
+npm install
+npm install sharp @img/sharp-wasm32
 npm start
 ```
 

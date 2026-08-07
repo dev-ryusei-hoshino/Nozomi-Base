@@ -45,6 +45,7 @@ If you are the rightful copyright holder and believe that any content in this re
 git clone https://github.com/dev-ryusei-hoshino/Nozomi-Base
 cd Nozomi-Base
 npm install
+npm install sharp
 npm start
 ```
 <br>

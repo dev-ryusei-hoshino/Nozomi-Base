@@ -36,7 +36,6 @@ const SERVICES = [
 export default {
   name: "To URL",
   command: ["tourl"],
-  cost: 500,
   description: "Upload media ke berbagai file host",
   category: "tools",
 

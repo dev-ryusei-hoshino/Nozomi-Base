@@ -2,9 +2,8 @@ import packageFile from "./package.json" with { type: "json" };
 
 export default {
   pairingWithQr: false,
-  ignore_self: true, // matikan jika perlu saja, karena ini bisa fatal
+  ignore_self: true,
   markOnlineOnConnect: true,
-  auto_read: true,
 
   bot: {
     name: "Nozomi Base",
@@ -21,18 +20,18 @@ export default {
       name: "Ryusei Hoshino",
     },
   },
-
   mess: {
-    owner: "🚫 Akses ditolak. Fitur ini khusus owner bot.",
-    admin:
-      "🚫 Akses ditolak. Hanya admin grup yang dapat menggunakan fitur ini.",
+    owner: "🚫 Access denied! You're not the owner!",
+    admin: "🚫 Access denied! You're not an admin of this group!",
     bot_not_admin:
-      "⚠️ Bot harus menjadi admin terlebih dahulu untuk menjalankan fitur ini.",
-    group: "⚠️ Fitur ini hanya dapat digunakan di dalam grup.",
-    private: "⚠️ Fitur ini hanya tersedia di chat pribadi.",
-    permium: "🚫 Akses ditolak. Fitur ini khusus pengguna premium.",
-    wait: "⏳ Sedang memproses permintaan...",
-    plugin_not_available: "❌ *Error:* Plugin tidak tersedia untuk saat ini.",
+      "⚠️ This number needs to be an admin of this group to use this feature.",
+    group: "⚠️ Wrong place! This feature is only available in groups.",
+    private: "⚠️ Wrong place! Please don't use this feature here.",
+    premium:
+      "🚫 Nuh uh! You're not a premium user. Contact the owner to get premium access.",
+    wait: "⏳ Hold up...",
+    plugin_not_available:
+      "❌ *Error:* This plugin isn't available right now. Please try again later.",
   },
 };
 

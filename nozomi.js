@@ -1,3 +1,57 @@
+process.on("warning", (warning) => {
+  if (
+    warning.name === "DeprecationWarning" &&
+    warning.message.includes("punycode")
+  ) {
+    return;
+  }
+
+  console.warn(warning);
+});
+
+const originalWrite = process.stdout.write.bind(process.stdout);
+const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
+process.stdout.write = (chunk, encoding, callback) => {
+  const text = chunk?.toString?.() || "";
+
+  if (
+    text.includes("Closing session") ||
+    text.includes("(node:6008)") ||
+    text.includes("(node:8608)") ||
+    text.includes("(node:") ||
+    text.includes("[DEP0040]") ||
+    text.includes("✅") ||
+    text.includes("SessionEntry") ||
+    text.includes("currentRatchet") ||
+    text.includes(
+      "(Use `node --trace-deprecation ...` to show where the warning was created)",
+    ) ||
+    text.includes("pendingPreKey") ||
+    text.includes("[LOG] Emoji") ||
+    text.includes("EmojiDB loaded") ||
+    text.includes("EmojiDB saved")
+  ) {
+    return true;
+  }
+
+  return originalWrite(chunk, encoding, callback);
+};
+
+process.stderr.write = (chunk, encoding, callback) => {
+  const text = chunk?.toString?.() || "";
+
+  if (
+    text.includes("[DEP0040]") ||
+    text.includes("punycode") ||
+    text.includes("trace-deprecation")
+  ) {
+    return true;
+  }
+
+  return originalStderrWrite(chunk, encoding, callback);
+};
+
 import {
   makeWASocket,
   useMultiFileAuthState,
@@ -8,6 +62,7 @@ import Pino from "pino";
 import readline from "readline";
 import fs from "fs/promises";
 import chalk from "chalk";
+import packageFile from "./package.json" with { type: "json" };
 import QRCode from "qrcode-terminal";
 import validator from "validator";
 import { handleMessage } from "./handlers/message.js";
@@ -19,12 +74,55 @@ const sessionDir = "nozomi_sessions";
 
 function validatePhoneNumber(input) {
   const cleaned = input.replace(/[^0-9]/g, "");
-  if (!cleaned) throw new Error("Nomor tidak boleh kosong.");
+  if (!cleaned) throw new Error("Phone number cannot be empty.");
   if (!validator.isMobilePhone(cleaned, "id-ID"))
-    throw new Error("Format nomor tidak dikenali. Gunakan +62 xxx atau 08xxx.");
+    throw new Error("Phone number format not recognized. Use +62 xxx or 08xxx.");
   if (cleaned.startsWith("0")) return "62" + cleaned.slice(1);
   if (cleaned.startsWith("62")) return cleaned;
-  throw new Error("Format nomor tidak dikenali. Gunakan +62 xxx atau 08xxx.");
+  throw new Error("Phone number format not recognized. Use +62 xxx or 08xxx.");
+}
+
+async function checkForUpdates() {
+  try {
+    console.log("Checking for any updates..");
+    const response = await fetch(
+      "https://raw.githubusercontent.com/dev-ryusei-hoshino/Nozomi-Base/refs/heads/main/package.json",
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const remotePackage = await response.json();
+
+    const currentVersion = packageFile.version;
+    const latestVersion = remotePackage.version;
+
+    if (currentVersion === latestVersion || currentVersion >= latestVersion) {
+      console.log(
+        chalk.green(`You are using the latest version: v${currentVersion}`),
+      );
+      return;
+    }
+
+    console.log(chalk.yellow("A new version of Nozomi-Base is available."));
+    console.log(
+      `  ${chalk.gray("Current version:")} ${chalk.red(`v${currentVersion}`)}`,
+    );
+    console.log(
+      `  ${chalk.gray("Latest version:")}  ${chalk.green(`v${latestVersion}`)}`,
+    );
+    console.log(
+      "Please update Nozomi-Base manually to get the latest improvements and fixes.",
+    );
+    console.log(
+      `  ${chalk.gray("Repository:")} ${chalk.underline(
+        "https://github.com/dev-ryusei-hoshino/Nozomi-Base",
+      )}`,
+    );
+  } catch (error) {
+    console.error(chalk.red("Failed to check for updates:"), error.message);
+  }
 }
 
 async function askPhoneNumber() {
@@ -37,11 +135,11 @@ async function askPhoneNumber() {
     const phoneNumberInput = await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         rl.close();
-        reject(new Error("Waktu habis. Silakan coba lagi."));
+        reject(new Error("Time's up. Please try again."));
       }, 120000);
 
       rl.question(
-        `Masukkan nomor WhatsApp bot kamu ${chalk.gray(`(contoh: 6281234567890)`)}:\n`,
+        `Enter your bot WhatsApp number ${chalk.gray(`(example: 6281234567890)`)}:\n`,
         (answer) => {
           clearTimeout(timeout);
           resolve(answer);
@@ -81,20 +179,20 @@ async function connectToWhatsApp() {
           const phoneNumber = await askPhoneNumber();
           const code = await conn.requestPairingCode(phoneNumber);
 
-          console.log(`KODE PAIRING KAMU: ${chalk.yellow(code)}`);
+          console.log(`YOUR PAIRING CODE: ${chalk.yellow(code)}`);
           console.log(
             chalk.gray(
-              `Cara login: Buka WhatsApp > Tautkan Perangkat > Tautkan dengan Nomor Telepon > Masukkan kode di atas.`,
+              `How to login: Open WhatsApp > Link Devices > Link with Phone Number > Enter the code above.`,
             ),
           );
         } catch (err) {
-          console.error("Gagal meminta kode pairing:", err.message);
+          console.error("Failed to request pairing code:", err.message);
           return connectToWhatsApp();
         }
       } else if (config.pairingWithQr) {
         QRCode.generate(qr, { small: true });
         console.log(
-          "Scan QR code di atas dengan WhatsApp > Tautkan Perangkat > Tautkan Perangkat",
+          "Scan the QR code above with WhatsApp > Link Devices > Link Devices",
         );
       }
     }
@@ -102,25 +200,25 @@ async function connectToWhatsApp() {
     if (connection === "close") {
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== 401;
 
-      console.log("Koneksi terputus, mencoba menghubungkan ulang..");
+      console.log("Connection lost, trying to reconnect..");
 
       if (shouldReconnect) {
         setTimeout(() => connectToWhatsApp(), 3000);
       } else {
         console.log(
-          `Sesi tidak valid. Menghapus folder "${chalk.yellow(sessionDir)}" dan mencoba lagi...`,
+          `Invalid session. Deleting folder "${chalk.yellow(sessionDir)}" and trying again...`,
         );
 
         try {
           await fs.rm(sessionDir, { recursive: true, force: true });
         } catch (err) {
-          console.error("Gagal menghapus folder sesi:", err.message);
+          console.error("Failed to delete session folder:", err.message);
         }
 
         setTimeout(() => connectToWhatsApp(), 3000);
       }
     } else if (connection === "open") {
-      console.log("🎉 Nozomi Bot berhasil tersambung ke WhatsApp!");
+      console.log(`🎉 ${config.bot.name} successfully connected to WhatsApp!`);
     }
   });
 
@@ -134,4 +232,5 @@ async function connectToWhatsApp() {
 }
 
 await loadPlugins();
+checkForUpdates();
 connectToWhatsApp();

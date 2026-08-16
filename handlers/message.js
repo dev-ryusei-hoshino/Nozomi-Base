@@ -1,6 +1,9 @@
 import config from "../config.js";
 import { plugins } from "../plugins/index.js";
 import axios from "axios";
+import { getRuntimeValue, setRuntimeValue } from "../utils/runtime.js";
+import packageFile from "../package.json" with { type: "json" };
+import fs from "fs";
 import { Button } from "../utils/MessageBuilderV4.6.js";
 import chalk from "chalk";
 
@@ -127,7 +130,8 @@ export async function handleMessage(conn, msg) {
       ? senderJid.replace("@s.whatsapp.net", "")
       : "";
     const senderName = msg.verifiedBizName || msg.pushName || "Tanpa Nama";
-    if (senderNumber === config.bot.owner.number) isOwner = true;
+    if (senderNumber === config.bot.owner.number || senderLid === botLid)
+      isOwner = true;
     const prefixes = config.bot.prefix;
 
     let type;
@@ -141,7 +145,8 @@ export async function handleMessage(conn, msg) {
       type = chalk.magenta("[UNKNOWN]");
     }
 
-    if (config.auto_read) await conn.readMessages([m.key]);
+    const autoRead = await getRuntimeValue("auto_read");
+    if (autoRead === true) await conn.readMessages([m.key]);
     if (!isChannel)
       console.log(
         "[NEW MESSAGE]",
@@ -158,6 +163,8 @@ export async function handleMessage(conn, msg) {
     }
 
     if (isCmd) {
+      const isSelf = await getRuntimeValue("self");
+      if (isSelf === true && !isOwner) return;
       const splitMsg = mess.slice(usedPrefix.length).trim().split(/ +/);
       command = splitMsg.shift().toLowerCase();
       args = splitMsg;
@@ -181,6 +188,7 @@ export async function handleMessage(conn, msg) {
         senderJid,
         senderLid,
         senderName,
+        command,
         formattedLid,
         senderNumber,
         args,

@@ -1,4 +1,4 @@
-<img alt="thumb" src="https://cdn.ornzora.eu.cc/bc527520-3ff3-4e5f-aadf-1913b55e52ae-upload-1786117255395.jpg" align="center" width="100%"> 
+<img alt="thumb" src="./thumb.jpeg" align="center" width="100%"> 
 <h1 align="center">Nozomi-Base (ESM)</h1>
 <p align="center"><b>Nozomi-Base</b> is a ready-to-use and extensible WhatsApp bot base, allowing developers to focus on building features instead of dealing with connection handling, authentication, and other boilerplate setup.</p>
 

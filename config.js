@@ -75,7 +75,7 @@ export default {
 | https://whatsapp.com/channel/0029VbDnVYyK0IBjO8RGfq3N
 |
 | Contact :
-| https://wa.me/6285198221676
+| https://wa.me/6283892508772
 |
 |--------------------------------------------------------------------------
 | Acknowledgements

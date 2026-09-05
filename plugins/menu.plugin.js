@@ -3,7 +3,7 @@ import { plugins } from "../plugins/index.js";
 import sharp from "sharp";
 import chalk from "chalk";
 import axios from "axios";
-import { Button } from "../utils/MessageBuilderV4.6.js";
+import { Button } from "../utils/MessageBuilderV4.7.js";
 import os from "os";
 
 export default {

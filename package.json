@@ -1,6 +1,6 @@
 {
   "name": "nozomi-base",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Base bot whatsapp ( module )",
   "license": "ISC",
   "author": "",
@@ -8,7 +8,7 @@
   "main": "nozomi.js",
   "scripts": {
     "start": "node nozomi.js",
-    "dev": "nodemon nozomi.js --ignore node_modules/ --ignore nozomi_sessions/"
+    "dev": "nodemon nozomi.js --ignore node_modules/ --ignore nozomi_sessions/ --ignore database/"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc14",
@@ -16,6 +16,7 @@
     "chalk": "^6.0.0",
     "fluent-ffmpeg": "^2.1.3",
     "node-fetch": "^3.3.2",
+    "pdfjs-dist": "^6.3.289",
     "pino": "^10.3.1",
     "qrcode-terminal": "^0.12.0",
     "validator": "^13.15.35"

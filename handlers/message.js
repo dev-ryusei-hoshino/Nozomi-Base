@@ -4,7 +4,7 @@ import axios from "axios";
 import { getRuntimeValue, setRuntimeValue } from "../utils/runtime.js";
 import packageFile from "../package.json" with { type: "json" };
 import fs from "fs";
-import { Button } from "../utils/MessageBuilderV4.6.js";
+import { Button } from "../utils/MessageBuilderV4.7.js";
 import chalk from "chalk";
 
 function getDistance(a, b) {
@@ -112,14 +112,14 @@ export async function handleMessage(conn, msg) {
 
       const checkAdmin =
         participants.find((p) => p.id === senderLid) ||
-        participants.find((n) => n.id === senderJid);
+        participants.find((n) => n.phoneNumber === senderJid);
 
       isAdmin =
         checkAdmin?.admin === "admin" || checkAdmin?.admin === "superadmin";
 
       const checkBotAdmin =
         participants.find((p) => p.id === botLid) ||
-        participants.find((n) => n.id === botJid);
+        participants.find((n) => n.phoneNumber === botJid);
 
       isBotAdmin =
         checkBotAdmin?.admin === "admin" ||
@@ -132,6 +132,7 @@ export async function handleMessage(conn, msg) {
     const senderName = msg.verifiedBizName || msg.pushName || "Tanpa Nama";
     if (senderNumber === config.bot.owner.number || senderLid === botLid)
       isOwner = true;
+
     const prefixes = config.bot.prefix;
 
     let type;

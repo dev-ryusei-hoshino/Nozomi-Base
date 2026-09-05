@@ -1,5 +1,5 @@
 import config from "../config.js";
-import { Button } from "../utils/MessageBuilderV4.6.js";
+import { Button } from "../utils/MessageBuilderV4.7.js";
 
 export default {
   name: "Get Channel ID",

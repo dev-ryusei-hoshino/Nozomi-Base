@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { performance } from "perf_hooks";
-import { AIRich } from "../utils/MessageBuilderV4.6.js";
+import { AIRich } from "../utils/MessageBuilderV4.7.js";
 import config from "../config.js";
 import axios from "axios";
 import os from "os";

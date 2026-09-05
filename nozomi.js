@@ -9,43 +9,38 @@ process.on("warning", (warning) => {
   console.warn(warning);
 });
 
-const originalWrite = process.stdout.write.bind(process.stdout);
+const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
+const stdoutFilters = [
+  "Closing session",
+  "(node:",
+  "[DEP0040]",
+  "SessionEntry",
+  "currentRatchet",
+  "pendingPreKey",
+  "[LOG] Emoji",
+  "EmojiDB loaded",
+  "EmojiDB saved",
+  "trace-deprecation",
+];
+
+const stderrFilters = ["[DEP0040]", "punycode", "trace-deprecation"];
 
 process.stdout.write = (chunk, encoding, callback) => {
   const text = chunk?.toString?.() || "";
 
-  if (
-    text.includes("Closing session") ||
-    text.includes("(node:6008)") ||
-    text.includes("(node:8608)") ||
-    text.includes("(node:") ||
-    text.includes("[DEP0040]") ||
-    text.includes("✅") ||
-    text.includes("SessionEntry") ||
-    text.includes("currentRatchet") ||
-    text.includes(
-      "(Use `node --trace-deprecation ...` to show where the warning was created)",
-    ) ||
-    text.includes("pendingPreKey") ||
-    text.includes("[LOG] Emoji") ||
-    text.includes("EmojiDB loaded") ||
-    text.includes("EmojiDB saved")
-  ) {
+  if (stdoutFilters.some((filter) => text.includes(filter))) {
     return true;
   }
 
-  return originalWrite(chunk, encoding, callback);
+  return originalStdoutWrite(chunk, encoding, callback);
 };
 
 process.stderr.write = (chunk, encoding, callback) => {
   const text = chunk?.toString?.() || "";
 
-  if (
-    text.includes("[DEP0040]") ||
-    text.includes("punycode") ||
-    text.includes("trace-deprecation")
-  ) {
+  if (stderrFilters.some((filter) => text.includes(filter))) {
     return true;
   }
 
@@ -55,9 +50,9 @@ process.stderr.write = (chunk, encoding, callback) => {
 import {
   makeWASocket,
   useMultiFileAuthState,
-  fetchLatestBaileysVersion,
   Browsers,
 } from "@whiskeysockets/baileys";
+
 import Pino from "pino";
 import readline from "readline";
 import fs from "fs/promises";
@@ -65,32 +60,60 @@ import chalk from "chalk";
 import packageFile from "./package.json" with { type: "json" };
 import QRCode from "qrcode-terminal";
 import validator from "validator";
+import config from "./config.js";
+
 import { handleMessage } from "./handlers/message.js";
 import { loadPlugins } from "./plugins/index.js";
 
-import config from "./config.js";
+const sessionDir = config.sessionDir || "nozomi_sessions";
 
-const sessionDir = "nozomi_sessions";
+let reconnectTimer = null;
+let connecting = false;
 
 function validatePhoneNumber(input) {
   const cleaned = input.replace(/[^0-9]/g, "");
-  if (!cleaned) throw new Error("Phone number cannot be empty.");
-  if (!validator.isMobilePhone(cleaned, "id-ID"))
-    throw new Error("Phone number format not recognized. Use +62 xxx or 08xxx.");
-  if (cleaned.startsWith("0")) return "62" + cleaned.slice(1);
-  if (cleaned.startsWith("62")) return cleaned;
+
+  if (!cleaned) {
+    throw new Error("Phone number cannot be empty.");
+  }
+
+  if (!validator.isMobilePhone(cleaned, "id-ID")) {
+    throw new Error(
+      "Phone number format not recognized. Use +62 xxx or 08xxx.",
+    );
+  }
+
+  if (cleaned.startsWith("0")) {
+    return "62" + cleaned.slice(1);
+  }
+
+  if (cleaned.startsWith("62")) {
+    return cleaned;
+  }
+
   throw new Error("Phone number format not recognized. Use +62 xxx or 08xxx.");
 }
 
 async function checkForUpdates() {
   try {
-    console.log("Checking for any updates..");
+    if (!config.checkForUpdates) return;
+    const controller = new AbortController();
+
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, 5000);
+
     const response = await fetch(
       "https://raw.githubusercontent.com/dev-ryusei-hoshino/Nozomi-Base/refs/heads/main/package.json",
+      {
+        signal: controller.signal,
+      },
     );
 
+    clearTimeout(timeout);
+
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      return;
     }
 
     const remotePackage = await response.json();
@@ -98,7 +121,7 @@ async function checkForUpdates() {
     const currentVersion = packageFile.version;
     const latestVersion = remotePackage.version;
 
-    if (currentVersion === latestVersion || currentVersion >= latestVersion) {
+    if (currentVersion === latestVersion) {
       console.log(
         chalk.green(`You are using the latest version: v${currentVersion}`),
       );
@@ -113,16 +136,11 @@ async function checkForUpdates() {
       `  ${chalk.gray("Latest version:")}  ${chalk.green(`v${latestVersion}`)}`,
     );
     console.log(
-      "Please update Nozomi-Base manually to get the latest improvements and fixes.",
-    );
-    console.log(
       `  ${chalk.gray("Repository:")} ${chalk.underline(
         "https://github.com/dev-ryusei-hoshino/Nozomi-Base",
       )}`,
     );
-  } catch (error) {
-    console.error(chalk.red("Failed to check for updates:"), error.message);
-  }
+  } catch {}
 }
 
 async function askPhoneNumber() {
@@ -139,7 +157,9 @@ async function askPhoneNumber() {
       }, 120000);
 
       rl.question(
-        `Enter your bot WhatsApp number ${chalk.gray(`(example: 6281234567890)`)}:\n`,
+        `Enter your bot WhatsApp number ${chalk.gray(
+          "(example: 6281234567890)",
+        )}:\n`,
         (answer) => {
           clearTimeout(timeout);
           resolve(answer);
@@ -154,83 +174,143 @@ async function askPhoneNumber() {
 }
 
 async function connectToWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+  if (connecting) {
+    return;
+  }
 
-  const { version } = await fetchLatestBaileysVersion();
+  connecting = true;
 
-  const conn = makeWASocket({
-    auth: state,
-    printQRInTerminal: config.pairingWithQr,
-    browser: Browsers.macOS("Safari"),
-    logger: Pino({ level: "silent" }),
-    markOnlineOnConnect: config.bot.markOnlineOnConnect,
-    version,
-  });
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
-  let pairingRequested = false;
+    const conn = makeWASocket({
+      auth: state,
+      printQRInTerminal: config.pairingWithQr,
+      browser: Browsers.macOS("Safari"),
+      logger: Pino({ level: "silent" }),
+      markOnlineOnConnect: config.bot.markOnlineOnConnect,
+      syncFullHistory: config.syncFullHistory,
+    });
 
-  conn.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect, qr } = update;
+    let pairingRequested = false;
 
-    if (qr && !conn.authState.creds.registered) {
-      if (!config.pairingWithQr && !pairingRequested) {
-        pairingRequested = true;
-        try {
-          const phoneNumber = await askPhoneNumber();
-          const code = await conn.requestPairingCode(phoneNumber);
+    conn.ev.on("connection.update", async (update) => {
+      const { connection, lastDisconnect, qr } = update;
 
-          console.log(`YOUR PAIRING CODE: ${chalk.yellow(code)}`);
+      if (qr && !conn.authState.creds.registered) {
+        if (!config.pairingWithQr && !pairingRequested) {
+          pairingRequested = true;
+
+          try {
+            const phoneNumber = await askPhoneNumber();
+            const code = await conn.requestPairingCode(phoneNumber);
+
+            console.log(`YOUR PAIRING CODE: ${chalk.yellow(code)}`);
+
+            console.log(
+              chalk.gray(
+                "Open WhatsApp > Link Devices > Link with Phone Number > Enter the code above.",
+              ),
+            );
+          } catch (error) {
+            console.error("Failed to request pairing code:", error.message);
+          }
+        }
+
+        if (config.pairingWithQr) {
+          QRCode.generate(qr, { small: true });
+
           console.log(
-            chalk.gray(
-              `How to login: Open WhatsApp > Link Devices > Link with Phone Number > Enter the code above.`,
-            ),
+            "Scan the QR code above with WhatsApp > Link Devices > Link Devices",
           );
-        } catch (err) {
-          console.error("Failed to request pairing code:", err.message);
-          return connectToWhatsApp();
         }
-      } else if (config.pairingWithQr) {
-        QRCode.generate(qr, { small: true });
-        console.log(
-          "Scan the QR code above with WhatsApp > Link Devices > Link Devices",
-        );
       }
-    }
 
-    if (connection === "close") {
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== 401;
+      if (connection === "open") {
+        connecting = false;
 
-      console.log("Connection lost, trying to reconnect..");
-
-      if (shouldReconnect) {
-        setTimeout(() => connectToWhatsApp(), 3000);
-      } else {
         console.log(
-          `Invalid session. Deleting folder "${chalk.yellow(sessionDir)}" and trying again...`,
+          `${chalk.green("Connected")} ${config.bot.name} successfully connected to WhatsApp!`,
         );
 
+        return;
+      }
+
+      if (connection === "close") {
+        connecting = false;
+
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+
+        const shouldReconnect = statusCode !== 401;
+
+        if (!shouldReconnect) {
+          console.log(
+            `Invalid session. Deleting folder "${chalk.yellow(sessionDir)}"...`,
+          );
+
+          try {
+            await fs.rm(sessionDir, {
+              recursive: true,
+              force: true,
+            });
+          } catch (error) {
+            console.error("Failed to delete session folder:", error.message);
+          }
+        }
+
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+        }
+
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connectToWhatsApp();
+        }, 3000);
+      }
+    });
+
+    conn.ev.on("creds.update", saveCreds);
+
+    conn.ev.on("messages.upsert", async ({ messages }) => {
+      for (const msg of messages) {
         try {
-          await fs.rm(sessionDir, { recursive: true, force: true });
-        } catch (err) {
-          console.error("Failed to delete session folder:", err.message);
+          await handleMessage(conn, msg);
+        } catch (error) {
+          console.error("Message handler error:", error);
         }
-
-        setTimeout(() => connectToWhatsApp(), 3000);
       }
-    } else if (connection === "open") {
-      console.log(`🎉 ${config.bot.name} successfully connected to WhatsApp!`);
+    });
+  } catch (error) {
+    connecting = false;
+
+    console.error("WhatsApp connection error:", error);
+
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
     }
-  });
 
-  conn.ev.on("creds.update", saveCreds);
-
-  conn.ev.on("messages.upsert", async ({ messages }) => {
-    const msg = messages[0];
-
-    await handleMessage(conn, msg);
-  });
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connectToWhatsApp();
+    }, 3000);
+  }
 }
 
-await loadPlugins();
+async function start() {
+  console.log(chalk.cyan(`Starting ${config.bot.name}...`));
+
+  const pluginPromise = loadPlugins();
+
+  connectToWhatsApp();
+
+  pluginPromise
+    .then(() => {
+      console.log(chalk.green("Plugins loaded successfully."));
+    })
+    .catch((error) => {
+      console.error(chalk.red("Failed to load plugins:"), error);
+    });
+}
+
 checkForUpdates();
-connectToWhatsApp();
+start();

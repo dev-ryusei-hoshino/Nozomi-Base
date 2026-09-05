@@ -2,8 +2,11 @@ import packageFile from "./package.json" with { type: "json" };
 
 export default {
   pairingWithQr: false,
-  ignore_self: true,
+  ignore_self: false,
   markOnlineOnConnect: true,
+  sessionDir: "nozomi_session",
+  syncFullHistory: false,
+  checkForUpdates: false,
 
   bot: {
     name: "Nozomi Base",
@@ -13,10 +16,10 @@ export default {
       "https://i.ibb.co.com/0yJCNd0C/b1140d19-b147-4db9-8189-a0df99852a50.jpg",
     vid_thumb:
       "https://cdn.ornzora.eu.cc/7e92c9af-9e11-42f1-803c-8c23ecdb0ffe-upload-1786022115577.mp4",
-    prefix: ["!", "."],
+    prefix: ["!", "$"],
 
     owner: {
-      number: "6285198221676",
+      number: "6283892508772",
       name: "Ryusei Hoshino",
     },
   },

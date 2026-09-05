@@ -23,6 +23,7 @@ async function loadPlugin(file) {
   const fileUrl = `${pathToFileURL(filePath).href}?t=${Date.now()}`;
 
   try {
+    const start = performance.now();
     const module = await import(fileUrl);
     const plugin = module.default;
 
@@ -40,7 +41,11 @@ async function loadPlugin(file) {
       });
 
       pluginTracker.set(file, commands);
-      console.log(log.success, `Berhasil memuat: ${plugin.name || file}`);
+      const ms = (performance.now() - start).toFixed(0);
+      console.log(
+        log.success,
+        `Berhasil memuat: ${plugin.name || file} (${ms}ms)`,
+      );
     }
   } catch (err) {
     console.error(
@@ -57,41 +62,51 @@ export async function loadPlugins() {
     .readdirSync(__dirname)
     .filter((file) => file.endsWith(".plugin.js"));
 
-  for (const file of ObjectFiles) {
-    await loadPlugin(file);
-  }
+  await Promise.all(ObjectFiles.map(loadPlugin));
 
   if (!error) console.clear();
 }
 
 const watchTimers = new Map();
-fs.watch(__dirname, (eventType, filename) => {
-  if (filename && filename.endsWith(".plugin.js")) {
-    if (watchTimers.has(filename)) clearTimeout(watchTimers.get(filename));
 
-    watchTimers.set(
-      filename,
-      setTimeout(async () => {
-        const filePath = path.join(__dirname, filename);
+function watchPluginsDir() {
+  try {
+    fs.watch(__dirname, { persistent: false }, (eventType, filename) => {
+      if (filename && filename.endsWith(".plugin.js")) {
+        if (watchTimers.has(filename)) clearTimeout(watchTimers.get(filename));
 
-        if (!fs.existsSync(filePath)) {
-          if (pluginTracker.has(filename)) {
-            const cmds = pluginTracker.get(filename);
-            cmds.forEach((cmd) => plugins.delete(cmd.toLowerCase()));
-            pluginTracker.delete(filename);
-            console.log(log.info, `Plugin dihapus dari memory: ${filename}`);
-          }
-          return;
-        }
+        watchTimers.set(
+          filename,
+          setTimeout(async () => {
+            const filePath = path.join(__dirname, filename);
 
-        console.log(
-          log.info,
-          `Perubahan terdeteksi pada ${chalk.yellow(filename)}, memuat ulang...`,
+            if (!fs.existsSync(filePath)) {
+              if (pluginTracker.has(filename)) {
+                const cmds = pluginTracker.get(filename);
+                cmds.forEach((cmd) => plugins.delete(cmd.toLowerCase()));
+                pluginTracker.delete(filename);
+                console.log(
+                  log.info,
+                  `Plugin dihapus dari memory: ${filename}`,
+                );
+              }
+              return;
+            }
+
+            console.log(
+              log.info,
+              `Perubahan terdeteksi pada ${chalk.yellow(filename)}, memuat ulang...`,
+            );
+            await loadPlugin(filename);
+          }, 100),
         );
-        await loadPlugin(filename);
-      }, 100),
-    );
+      }
+    });
+  } catch (err) {
+    console.warn(chalk.yellow("Gagal memulai file watcher:"), err.message);
   }
-});
+}
 
-export { plugins };
+watchPluginsDir();
+
+export { plugins, pluginTracker };

@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import config from "../config.js";
-import { AIRich } from "../utils/MessageBuilderV4.6.js";
+import { AIRich } from "../utils/MessageBuilderV4.7.js";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

@@ -6,7 +6,7 @@ export default {
   markOnlineOnConnect: true,
   sessionDir: "nozomi_session",
   syncFullHistory: false,
-  checkForUpdates: false,
+  checkForUpdates: true,
 
   bot: {
     name: "Nozomi Base",

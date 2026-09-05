@@ -166,7 +166,7 @@ export default {
 <a href="https://whatsapp.com/channel/0029VbDnVYyK0IBjO8RGfq3N"
 style="display:flex;align-items:center;justify-content:center;padding:12px 16px;border:1px solid #061f00;border-radius:12px;background-color:#54af0a;text-decoration:none;"> <strong>WhatsApp Channel</strong> </a>
 
-<a href="https://wa.me/6285198221676"
+<a href="https://wa.me/6283892508772"
 style="display:flex;align-items:center;justify-content:center;padding:12px 16px;border:1px solid #ffbb00;border-radius:12px;text-decoration:none;"> <strong>Contact the Owner (WhatsApp)</strong> </a>
 
 </div>

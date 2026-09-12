@@ -8,647 +8,1222 @@ import { Button } from "../utils/MessageBuilderV4.7.js";
 import chalk from "chalk";
 
 function getDistance(a, b) {
-  const matrix = Array.from({ length: a.length + 1 }, () => []);
-  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
-  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+  const matrix = Array.from(
+    { length: a.length + 1 },
+    () => Array(b.length + 1).fill(0)
+  );
+
+  for (let i = 0; i <= a.length; i++) {
+    matrix[i][0] = i;
+  }
+
+  for (let j = 0; j <= b.length; j++) {
+    matrix[0][j] = j;
+  }
+
   for (let i = 1; i <= a.length; i++) {
     for (let j = 1; j <= b.length; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+
       matrix[i][j] = Math.min(
         matrix[i - 1][j] + 1,
         matrix[i][j - 1] + 1,
-        matrix[i - 1][j - 1] + cost,
+        matrix[i - 1][j - 1] + cost
       );
     }
   }
+
   return matrix[a.length][b.length];
 }
 
 function findClosest(input, list) {
   let closest = null;
   let minDistance = Infinity;
+
   for (const item of list) {
-    const dist = getDistance(input, item);
-    if (dist < minDistance) {
-      minDistance = dist;
+    const distance = getDistance(
+      input.toLowerCase(),
+      item.toLowerCase()
+    );
+
+    if (distance < minDistance) {
+      minDistance = distance;
       closest = item;
     }
   }
+
   return minDistance <= 2 ? closest : null;
 }
 
-export async function handleMessage(conn, msg) {
-  try {
-    const isMe = msg.key.fromMe;
+function getContentType(message) {
+  if (!message || typeof message !== "object") return null;
 
-    if (!msg.message) return;
-    if (config.ignore_self && isMe) return;
+  const ignored = [
+    "messageContextInfo",
+    "senderKeyDistributionMessage",
+    "protocolMessage",
+    "ephemeralMessage",
+    "viewOnceMessage",
+    "viewOnceMessageV2",
+    "documentWithCaptionMessage",
+  ];
 
-    const mess =
-      msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-    if (!mess) return;
+  const type = Object.keys(message).find(
+    (key) => !ignored.includes(key)
+  );
 
-    const remoteJid = msg.key.remoteJid || "";
-    const isGroup = remoteJid.endsWith("@g.us");
-    const isChannel = remoteJid.endsWith("@newsletter");
-    const isBroadcast =
-      remoteJid === "status@broadcast" || msg.broadcast === true;
-    const isPrivate = !isGroup && !isChannel && !isBroadcast;
+  return type || Object.keys(message)[0] || null;
+}
 
-    let isAdmin = false;
-    let isBotAdmin = false;
-    let isOwner = false;
-    let isCmd = false;
-    let usedPrefix = "";
-    let command = "";
-    let args = [];
-
-    const getContentType = (message) => {
-  if (!message) return null;
-  return Object.keys(message)[0];
-};
-
-const unwrapMessage = (message) => {
+function unwrapMessage(message) {
   if (!message) return null;
 
-  if (message.ephemeralMessage) {
+  if (message.ephemeralMessage?.message) {
     return unwrapMessage(message.ephemeralMessage.message);
   }
 
-  if (message.viewOnceMessage) {
+  if (message.viewOnceMessage?.message) {
     return unwrapMessage(message.viewOnceMessage.message);
   }
 
-  if (message.viewOnceMessageV2) {
+  if (message.viewOnceMessageV2?.message) {
     return unwrapMessage(message.viewOnceMessageV2.message);
   }
 
-  if (message.documentWithCaptionMessage) {
+  if (message.viewOnceMessageV2Extension?.message) {
+    return unwrapMessage(message.viewOnceMessageV2Extension.message);
+  }
+
+  if (message.documentWithCaptionMessage?.message) {
     return unwrapMessage(message.documentWithCaptionMessage.message);
   }
 
   return message;
-};
+}
 
-const getText = (message) => {
-  const msg = unwrapMessage(message);
-  if (!msg) return '';
+function getContextInfo(message) {
+  const content = unwrapMessage(message);
 
-  return (
-    msg.conversation ||
-    msg.extendedTextMessage?.text ||
-    msg.imageMessage?.caption ||
-    msg.videoMessage?.caption ||
-    msg.documentMessage?.caption ||
-    msg.buttonsResponseMessage?.selectedButtonId ||
-    msg.listResponseMessage?.singleSelectReply?.selectedRowId ||
-    msg.templateButtonReplyMessage?.selectedId ||
-    msg.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ||
-    ''
-  );
-};
+  if (!content) return {};
 
-const getQuoted = (message) => {
-  const msg = unwrapMessage(message);
+  const type = getContentType(content);
+
+  return content?.[type]?.contextInfo || {};
+}
+
+function getText(message) {
+  const content = unwrapMessage(message);
+
+  if (!content) return "";
+
+  const type = getContentType(content);
+  const data = content?.[type];
 
   return (
-    msg?.extendedTextMessage?.contextInfo?.quotedMessage ||
-    msg?.imageMessage?.contextInfo?.quotedMessage ||
-    msg?.videoMessage?.contextInfo?.quotedMessage ||
-    msg?.documentMessage?.contextInfo?.quotedMessage ||
-    null
+    content.conversation ||
+    content.extendedTextMessage?.text ||
+    content.imageMessage?.caption ||
+    content.videoMessage?.caption ||
+    content.documentMessage?.caption ||
+    content.buttonsResponseMessage?.selectedButtonId ||
+    content.buttonsResponseMessage?.selectedDisplayText ||
+    content.listResponseMessage?.singleSelectReply?.selectedRowId ||
+    content.listResponseMessage?.title ||
+    content.templateButtonReplyMessage?.selectedId ||
+    content.templateButtonReplyMessage?.selectedDisplayText ||
+    content.interactiveResponseMessage?.nativeFlowResponseMessage
+      ?.paramsJson ||
+    data?.caption ||
+    ""
   );
-};
+}
 
-const getContextInfo = (message) => {
-  const msg = unwrapMessage(message);
-  if (!msg) return {};
+function getQuoted(message) {
+  const contextInfo = getContextInfo(message);
 
-  const type = getContentType(msg);
+  return contextInfo?.quotedMessage || null;
+}
 
-  return msg[type]?.contextInfo || {};
-};
+function getMediaType(type) {
+  const mediaTypes = {
+    imageMessage: "image",
+    videoMessage: "video",
+    audioMessage: "audio",
+    documentMessage: "document",
+    stickerMessage: "sticker",
+  };
 
-const content = unwrapMessage(msg.message);
-const type = getContentType(content);
-const contextInfo = getContextInfo(msg.message);
+  return mediaTypes[type] || null;
+}
 
-const text = getText(msg.message).trim();
+function normalizeJid(jid) {
+  if (!jid) return "";
 
-const prefixMatch = text.match(/^[.!/#?]/);
-const prefix = prefixMatch?.[0] || '';
+  if (jid.includes(":")) {
+    const [user, server] = jid.split("@");
+    const number = user.split(":")[0];
 
-const body = prefix
-  ? text.slice(prefix.length).trim()
-  : text;
+    return `${number}@${server || "s.whatsapp.net"}`;
+  }
 
-const parts = body.split(/\s+/).filter(Boolean);
+  return jid;
+}
 
-const command = parts.shift()?.toLowerCase() || '';
+function getPhoneNumber(jid) {
+  if (!jid) return "";
 
-const args = parts;
+  return jid
+    .replace("@s.whatsapp.net", "")
+    .replace("@c.us", "")
+    .replace("@lid", "")
+    .replace(/:.+$/, "");
+}
 
-const quotedMessage = getQuoted(msg.message);
+function normalizePrefixes(prefixes) {
+  if (Array.isArray(prefixes)) {
+    return prefixes.filter(Boolean);
+  }
 
-const m = {
-  chat: remoteJid,
+  if (typeof prefixes === "string") {
+    return prefixes
+      .split("")
+      .filter(Boolean);
+  }
 
-  sender:
-    senderJid ||
-    senderLid ||
-    remoteJid,
+  return [".", "!", "/", "#"];
+}
 
-  senderJid,
+function parseCommand(text, prefixes) {
+  const value = String(text || "").trim();
 
-  senderLid,
+  if (!value) {
+    return {
+      isCmd: false,
+      usedPrefix: "",
+      command: "",
+      args: [],
+      body: "",
+    };
+  }
 
-  key: msg.key,
+  const sortedPrefixes = [...prefixes].sort(
+    (a, b) => b.length - a.length
+  );
 
-  id: msg.key?.id,
+  const usedPrefix =
+    sortedPrefixes.find((prefix) =>
+      value.startsWith(prefix)
+    ) || "";
 
-  message: msg.message,
+  if (!usedPrefix) {
+    return {
+      isCmd: false,
+      usedPrefix: "",
+      command: "",
+      args: [],
+      body: value,
+    };
+  }
 
-  raw: msg,
+  const body = value
+    .slice(usedPrefix.length)
+    .trim();
 
-  type,
+  if (!body) {
+    return {
+      isCmd: false,
+      usedPrefix,
+      command: "",
+      args: [],
+      body,
+    };
+  }
 
-  content,
+  const parts = body
+    .split(/\s+/)
+    .filter(Boolean);
 
-  text,
+  const command = (
+    parts.shift() || ""
+  ).toLowerCase();
 
-  body,
+  return {
+    isCmd: Boolean(command),
+    usedPrefix,
+    command,
+    args: parts,
+    body,
+  };
+}
 
-  prefix,
+export async function handleMessage(conn, msg) {
+  try {
+    if (!msg?.message || !msg?.key) return;
 
-  command,
+    const isMe = Boolean(msg.key.fromMe);
 
-  args,
+    if (config.ignore_self && isMe) return;
 
-  arg: args.join(' '),
+    const remoteJid =
+      msg.key.remoteJid ||
+      msg.key.remoteJidAlt ||
+      "";
 
-  usedPrefix: prefix,
+    if (!remoteJid) return;
 
-  isCommand: Boolean(command),
+    const isGroup =
+      remoteJid.endsWith("@g.us");
 
-  isGroup:
-    remoteJid?.endsWith('@g.us') || false,
+    const isChannel =
+      remoteJid.endsWith("@newsletter");
 
-  isPrivate:
-    !remoteJid?.endsWith('@g.us'),
+    const isBroadcast =
+      remoteJid === "status@broadcast" ||
+      msg.broadcast === true;
 
-  isFromMe:
-    Boolean(msg.key?.fromMe),
+    const isPrivate =
+      !isGroup &&
+      !isChannel &&
+      !isBroadcast;
 
-  contextInfo,
+    const content =
+      unwrapMessage(msg.message);
 
-  mentionedJid:
-    contextInfo?.mentionedJid || [],
+    if (!content) return;
 
-  quoted: quotedMessage,
+    const type =
+      getContentType(content);
 
-  hasQuoted:
-    Boolean(quotedMessage),
+    const contextInfo =
+      getContextInfo(msg.message);
 
-  quotedType:
-    quotedMessage
-      ? getContentType(quotedMessage)
-      : null,
+    const mess =
+      getText(msg.message).trim();
 
-  timestamp:
-    Number(msg.messageTimestamp || 0),
+    const quotedMessage =
+      getQuoted(msg.message);
 
-  send: async (content, options = {}) => {
-    return conn.sendMessage(
-      remoteJid,
+    const quotedContent =
+      quotedMessage
+        ? unwrapMessage(quotedMessage)
+        : null;
+
+    const quotedType =
+      quotedContent
+        ? getContentType(quotedContent)
+        : null;
+
+    const prefixes =
+      normalizePrefixes(
+        config.bot?.prefix
+      );
+
+    const parsed =
+      parseCommand(
+        mess,
+        prefixes
+      );
+
+    let {
+      isCmd,
+      usedPrefix,
+      command,
+      args,
+      body,
+    } = parsed;
+
+    let isAdmin = false;
+    let isBotAdmin = false;
+    let isOwner = false;
+
+    const ids = [
+      msg.key.participant,
+      msg.key.participantAlt,
+      msg.key.remoteJidAlt,
+      msg.key.remoteJid,
+    ].filter(Boolean);
+
+    let senderLid =
+      ids.find((id) =>
+        id.includes("@lid")
+      ) || "";
+
+    let senderJid =
+      ids.find((id) =>
+        id.includes("@s.whatsapp.net")
+      ) || "";
+
+    const rawBotJid =
+      conn.user?.id || "";
+
+    const rawBotLid =
+      conn.user?.lid || "";
+
+    const botJid =
+      normalizeJid(rawBotJid);
+
+    const botLid =
+      rawBotLid ||
+      "";
+
+    const botNumber =
+      getPhoneNumber(botJid);
+
+    if (isMe) {
+      senderLid =
+        botLid ||
+        senderLid;
+
+      senderJid =
+        botJid ||
+        senderJid;
+    }
+
+    let jid =
+      isGroup ||
+      isChannel ||
+      isBroadcast
+        ? remoteJid
+        : senderJid ||
+          senderLid ||
+          remoteJid;
+
+    let groupMetadata = null;
+    let participants = [];
+
+    if (isGroup) {
+      try {
+        groupMetadata =
+          await conn.groupMetadata(
+            remoteJid
+          );
+
+        participants =
+          groupMetadata?.participants ||
+          [];
+
+        if (!senderJid && senderLid) {
+          const senderParticipant =
+            participants.find(
+              (participant) =>
+                participant.id === senderLid
+            );
+
+          if (
+            senderParticipant?.phoneNumber
+          ) {
+            senderJid =
+              normalizeJid(
+                senderParticipant.phoneNumber
+              );
+          }
+        }
+
+        const senderParticipant =
+          participants.find(
+            (participant) =>
+              participant.id === senderLid
+          ) ||
+          participants.find(
+            (participant) =>
+              normalizeJid(
+                participant.phoneNumber
+              ) === senderJid
+          ) ||
+          participants.find(
+            (participant) =>
+              participant.id === senderJid
+          );
+
+        isAdmin =
+          senderParticipant?.admin === "admin" ||
+          senderParticipant?.admin === "superadmin" ||
+          senderParticipant?.admin === "owner";
+
+        const botParticipant =
+          participants.find(
+            (participant) =>
+              participant.id === botLid
+          ) ||
+          participants.find(
+            (participant) =>
+              normalizeJid(
+                participant.phoneNumber
+              ) === botJid
+          ) ||
+          participants.find(
+            (participant) =>
+              participant.id === botJid
+          );
+
+        isBotAdmin =
+          botParticipant?.admin === "admin" ||
+          botParticipant?.admin === "superadmin" ||
+          botParticipant?.admin === "owner";
+      } catch (error) {
+        console.error(
+          "[GROUP METADATA ERROR]",
+          error
+        );
+      }
+    }
+
+    const formattedLid =
+      senderLid || "";
+
+    const senderNumber =
+      getPhoneNumber(senderJid);
+
+    const senderName =
+      msg.verifiedBizName ||
+      msg.pushName ||
+      "Tanpa Nama";
+
+    const ownerNumber =
+      String(
+        config.bot?.owner?.number || ""
+      ).replace(/\D/g, "");
+
+    isOwner =
+      Boolean(
+        ownerNumber &&
+        senderNumber &&
+        senderNumber === ownerNumber
+      ) ||
+      Boolean(
+        senderLid &&
+        botLid &&
+        senderLid === botLid
+      ) ||
+      Boolean(
+        senderJid &&
+        botJid &&
+        normalizeJid(senderJid) ===
+          normalizeJid(botJid)
+      );
+
+    const media =
+      content?.[type] || null;
+
+    const mentionedJid =
+      contextInfo?.mentionedJid || [];
+
+    const mediaType =
+      getMediaType(type);
+
+    const m = {
+      chat: remoteJid,
+
+      jid,
+
+      sender:
+        senderJid ||
+        senderLid ||
+        remoteJid,
+
+      senderJid,
+
+      senderLid,
+
+      senderNumber,
+
+      senderName,
+
+      botJid,
+
+      botLid,
+
+      botNumber,
+
+      key: msg.key,
+
+      id: msg.key?.id || "",
+
+      message: msg.message,
+
+      raw: msg,
+
+      type,
+
       content,
-      options
-    );
-  },
 
-  reply: async (text, options = {}) => {
-    return conn.sendMessage(
-      remoteJid,
-      {
-        text: String(text),
-        ...options,
+      text: mess,
+
+      mess,
+
+      body,
+
+      prefix: usedPrefix,
+
+      usedPrefix,
+
+      command,
+
+      args,
+
+      arg: args.join(" "),
+
+      isCommand: isCmd,
+
+      isCmd,
+
+      isGroup,
+
+      isPrivate,
+
+      isChannel,
+
+      isBroadcast,
+
+      isFromMe: isMe,
+
+      isOwner,
+
+      isAdmin,
+
+      isBotAdmin,
+
+      contextInfo,
+
+      mentionedJid,
+
+      mentions: mentionedJid,
+
+      hasQuoted:
+        Boolean(quotedMessage),
+
+      quoted:
+        quotedMessage,
+
+      quotedMessage,
+
+      quotedContent,
+
+      quotedType,
+
+      quotedText:
+        quotedMessage
+          ? getText(quotedMessage)
+          : "",
+
+      quotedSender:
+        contextInfo?.participant ||
+        contextInfo?.remoteJid ||
+        null,
+
+      isImage:
+        type === "imageMessage",
+
+      isVideo:
+        type === "videoMessage",
+
+      isAudio:
+        type === "audioMessage",
+
+      isDocument:
+        type === "documentMessage",
+
+      isSticker:
+        type === "stickerMessage",
+
+      isMedia:
+        Boolean(mediaType),
+
+      mediaType,
+
+      media,
+
+      mimetype:
+        media?.mimetype ||
+        null,
+
+      fileName:
+        media?.fileName ||
+        null,
+
+      caption:
+        media?.caption ||
+        null,
+
+      timestamp:
+        Number(
+          msg.messageTimestamp || 0
+        ),
+
+      pushName:
+        msg.pushName ||
+        senderName,
+
+      verifiedBizName:
+        msg.verifiedBizName ||
+        null,
+
+      send: async (
+        content,
+        options = {}
+      ) => {
+        return conn.sendMessage(
+          remoteJid,
+          content,
+          options
+        );
       },
-      {
-        quoted: msg,
-      }
-    );
-  },
 
-  react: async (emoji) => {
-    return conn.sendMessage(
-      remoteJid,
-      {
-        react: {
-          text: emoji,
-          key: msg.key,
-        },
-      }
-    );
-  },
-
-  delete: async () => {
-    return conn.sendMessage(
-      remoteJid,
-      {
-        delete: msg.key,
-      }
-    );
-  },
-
-  edit: async (text) => {
-    return conn.sendMessage(
-      remoteJid,
-      {
-        text: String(text),
-        edit: msg.key,
-      }
-    );
-  },
-
-  isImage:
-    type === 'imageMessage',
-
-  isVideo:
-    type === 'videoMessage',
-
-  isAudio:
-    type === 'audioMessage',
-
-  isDocument:
-    type === 'documentMessage',
-
-  isSticker:
-    type === 'stickerMessage',
-
-  isMedia:
-    [
-      'imageMessage',
-      'videoMessage',
-      'audioMessage',
-      'documentMessage',
-      'stickerMessage',
-    ].includes(type),
-
-  media:
-    content?.[type] || null,
-
-  mimetype:
-    content?.[type]?.mimetype || null,
-
-  fileName:
-    content?.[type]?.fileName || null,
-
-  caption:
-    content?.[type]?.caption || null,
-
-  mentions:
-    contextInfo?.mentionedJid || [],
-
-  isMentioned: (jid) => {
-    return (
-      contextInfo?.mentionedJid || []
-    ).includes(jid);
-  },
-
-  quotedText:
-    quotedMessage
-      ? getText(quotedMessage)
-      : '',
-
-  quotedContent:
-    quotedMessage
-      ? unwrapMessage(quotedMessage)
-      : null,
-
-  quotedSender:
-    contextInfo?.participant || null,
-
-  sendText: async (text, options = {}) => {
-    return conn.sendMessage(
-      remoteJid,
-      {
-        text: String(text),
-        ...options,
+      reply: async (
+        text,
+        options = {}
+      ) => {
+        return conn.sendMessage(
+          remoteJid,
+          {
+            text: String(text),
+            ...options,
+          },
+          {
+            quoted: msg,
+          }
+        );
       },
-      {
-        quoted: msg,
-      }
-    );
-  },
 
-  sendImage: async (
-    image,
-    caption = '',
-    options = {}
-  ) => {
-    return conn.sendMessage(
-      remoteJid,
-      {
+      react: async (emoji) => {
+        return conn.sendMessage(
+          remoteJid,
+          {
+            react: {
+              text: String(emoji),
+              key: msg.key,
+            },
+          }
+        );
+      },
+
+      delete: async () => {
+        return conn.sendMessage(
+          remoteJid,
+          {
+            delete: msg.key,
+          }
+        );
+      },
+
+      edit: async (text) => {
+        return conn.sendMessage(
+          remoteJid,
+          {
+            text: String(text),
+            edit: msg.key,
+          }
+        );
+      },
+
+      sendText: async (
+        text,
+        options = {}
+      ) => {
+        return conn.sendMessage(
+          remoteJid,
+          {
+            text: String(text),
+            ...options,
+          },
+          {
+            quoted: msg,
+          }
+        );
+      },
+
+      sendImage: async (
         image,
-        caption,
-        ...options,
+        caption = "",
+        options = {}
+      ) => {
+        return conn.sendMessage(
+          remoteJid,
+          {
+            image,
+            caption,
+            ...options,
+          },
+          {
+            quoted: msg,
+          }
+        );
       },
-      {
-        quoted: msg,
-      }
-    );
-  },
 
-  sendVideo: async (
-    video,
-    caption = '',
-    options = {}
-  ) => {
-    return conn.sendMessage(
-      remoteJid,
-      {
+      sendVideo: async (
         video,
-        caption,
-        ...options,
+        caption = "",
+        options = {}
+      ) => {
+        return conn.sendMessage(
+          remoteJid,
+          {
+            video,
+            caption,
+            ...options,
+          },
+          {
+            quoted: msg,
+          }
+        );
       },
-      {
-        quoted: msg,
-      }
-    );
-  },
 
-  sendAudio: async (
-    audio,
-    options = {}
-  ) => {
-    return conn.sendMessage(
-      remoteJid,
-      {
+      sendAudio: async (
         audio,
-        ...options,
+        options = {}
+      ) => {
+        return conn.sendMessage(
+          remoteJid,
+          {
+            audio,
+            ...options,
+          },
+          {
+            quoted: msg,
+          }
+        );
       },
-      {
-        quoted: msg,
-      }
-    );
-  },
 
-  sendDocument: async (
-    document,
-    fileName,
-    mimetype,
-    options = {}
-  ) => {
-    return conn.sendMessage(
-      remoteJid,
-      {
+      sendDocument: async (
         document,
         fileName,
         mimetype,
-        ...options,
+        options = {}
+      ) => {
+        return conn.sendMessage(
+          remoteJid,
+          {
+            document,
+            fileName,
+            mimetype,
+            ...options,
+          },
+          {
+            quoted: msg,
+          }
+        );
       },
-      {
-        quoted: msg,
-      }
-    );
-  },
 
-  sendSticker: async (
-    sticker,
-    options = {}
-  ) => {
-    return conn.sendMessage(
-      remoteJid,
-      {
+      sendSticker: async (
         sticker,
-        ...options,
+        options = {}
+      ) => {
+        return conn.sendMessage(
+          remoteJid,
+          {
+            sticker,
+            ...options,
+          },
+          {
+            quoted: msg,
+          }
+        );
       },
-      {
-        quoted: msg,
-      }
-    );
-  },
 
-  typing: async () => {
-    return conn.sendPresenceUpdate(
-      'composing',
-      remoteJid
-    );
-  },
+      typing: async () => {
+        return conn.sendPresenceUpdate(
+          "composing",
+          jid
+        );
+      },
 
-  recording: async () => {
-    return conn.sendPresenceUpdate(
-      'recording',
-      remoteJid
-    );
-  },
+      recording: async () => {
+        return conn.sendPresenceUpdate(
+          "recording",
+          jid
+        );
+      },
 
-  pause: async () => {
-    return conn.sendPresenceUpdate(
-      'paused',
-      remoteJid
-    );
-  },
+      pause: async () => {
+        return conn.sendPresenceUpdate(
+          "paused",
+          jid
+        );
+      },
 
-  getGroupMetadata: async () => {
-    if (!m.isGroup) return null;
+      available: async () => {
+        return conn.sendPresenceUpdate(
+          "available",
+          jid
+        );
+      },
 
-    return conn.groupMetadata(remoteJid);
-  },
+      getGroupMetadata: async () => {
+        if (!isGroup) return null;
 
-  hasArgs: (amount = 1) => {
-    return args.length >= amount;
-  },
-
-  getArg: (index) => {
-    return args[index];
-  },
-
-  getArgs: (start = 0) => {
-    return args.slice(start);
-  },
-
-  getMention: (index = 0) => {
-    return (
-      contextInfo?.mentionedJid?.[index] ||
-      null
-    );
-  },
-};
-
-    const ids = [
-      m.key.participant,
-      m.key.participantAlt,
-      m.key.remoteJid,
-      m.key.remoteJidAlt,
-    ];
-
-    let senderLid = ids.find((id) => id && id.includes("@lid"));
-    let senderJid = ids.find((id) => id && id.includes("@s.whatsapp.net"));
-    let jid =
-      isGroup || isChannel || isBroadcast ? remoteJid : senderJid || remoteJid;
-
-    const rawBotJid = conn.user.id;
-    const botLid = conn.user.lid;
-    const botJid = rawBotJid ? rawBotJid.split(":")[0] + "@s.whatsapp.net" : "";
-    let formattedLid = senderLid;
-    const botNumber = rawBotJid ? rawBotJid.split(":")[0] : "";
-
-    if (isMe) {
-      senderLid = botLid || senderLid;
-      senderJid = botJid || senderJid;
-    }
-
-    if (isGroup) {
-      const groupMetadata = await conn.groupMetadata(remoteJid);
-      const participants = groupMetadata.participants;
-
-      if (!senderJid && senderLid) {
-        const pData = participants.find((p) => p.id === senderLid);
-        if (pData && pData.phoneNumber) {
-          senderJid = pData.phoneNumber + "@s.whatsapp.net";
+        if (groupMetadata) {
+          return groupMetadata;
         }
-      }
 
-      const checkAdmin =
-        participants.find((p) => p.id === senderLid) ||
-        participants.find((n) => n.phoneNumber === senderJid);
+        return conn.groupMetadata(
+          remoteJid
+        );
+      },
 
-      isAdmin =
-        checkAdmin?.admin === "admin" || checkAdmin?.admin === "superadmin";
+      getParticipants: async () => {
+        if (!isGroup) return [];
 
-      const checkBotAdmin =
-        participants.find((p) => p.id === botLid) ||
-        participants.find((n) => n.phoneNumber === botJid);
+        if (participants.length) {
+          return participants;
+        }
 
-      isBotAdmin =
-        checkBotAdmin?.admin === "admin" ||
-        checkBotAdmin?.admin === "superadmin";
-    }
+        const metadata =
+          await conn.groupMetadata(
+            remoteJid
+          );
 
-    const senderNumber = senderJid
-      ? senderJid.replace("@s.whatsapp.net", "")
-      : "";
-    const senderName = msg.verifiedBizName || msg.pushName || "Tanpa Nama";
-    if (senderNumber === config.bot.owner.number || senderLid === botLid)
-      isOwner = true;
+        return metadata?.participants || [];
+      },
 
-    const prefixes = config.bot.prefix;
+      getParticipant: async (
+        participantJid
+      ) => {
+        if (!isGroup) return null;
 
-    let type;
-    if (isGroup) {
-      type = chalk.green("[GROUP]");
-    } else if (isPrivate) {
-      type = chalk.cyan("[PRIVATE]");
-    } else if (isBroadcast) {
-      type = chalk.blue("[BROADCAST]");
-    } else {
-      type = chalk.magenta("[UNKNOWN]");
-    }
+        const list =
+          await m.getParticipants();
 
-    const autoRead = await getRuntimeValue("auto_read");
-    if (autoRead === true) await conn.readMessages([m.key]);
-    if (!isChannel)
-      console.log(
-        "[NEW MESSAGE]",
-        type,
-        `${chalk.yellow(senderName)} ${chalk.gray(`(${senderNumber})`)}\n${chalk.yellow(">")} ${mess}\n`,
+        return (
+          list.find(
+            (participant) =>
+              participant.id ===
+              participantJid
+          ) ||
+          list.find(
+            (participant) =>
+              normalizeJid(
+                participant.phoneNumber
+              ) ===
+              normalizeJid(
+                participantJid
+              )
+          ) ||
+          null
+        );
+      },
+
+      isMentioned: (jid) => {
+        return mentionedJid.includes(jid);
+      },
+
+      getMention: (index = 0) => {
+        return (
+          mentionedJid[index] ||
+          null
+        );
+      },
+
+      hasArgs: (amount = 1) => {
+        return (
+          args.length >= amount
+        );
+      },
+
+      getArg: (index) => {
+        return args[index];
+      },
+
+      getArgs: (start = 0) => {
+        return args.slice(start);
+      },
+
+      getText: () => {
+        return mess;
+      },
+
+      getContent: () => {
+        return content;
+      },
+
+      getQuoted: () => {
+        return quotedMessage;
+      },
+
+      getQuotedText: () => {
+        return quotedMessage
+          ? getText(quotedMessage)
+          : "";
+      },
+    };
+
+    const logType =
+      isGroup
+        ? chalk.green("[GROUP]")
+        : isPrivate
+          ? chalk.cyan("[PRIVATE]")
+          : isBroadcast
+            ? chalk.blue("[BROADCAST]")
+            : isChannel
+              ? chalk.magenta("[CHANNEL]")
+              : chalk.gray("[UNKNOWN]");
+
+    const autoRead =
+      await getRuntimeValue(
+        "auto_read"
       );
 
-    for (const p of prefixes) {
-      if (mess.startsWith(p)) {
-        isCmd = true;
-        usedPrefix = p;
-        break;
-      }
-    }
-
-    if (isCmd) {
-      const isSelf = await getRuntimeValue("self");
-      if (isSelf === true && !isOwner) return;
-      const splitMsg = mess.slice(usedPrefix.length).trim().split(/ +/);
-      command = splitMsg.shift().toLowerCase();
-      args = splitMsg;
-    }
-
-    if (isCmd && plugins.has(command)) {
-      const plugin = plugins.get(command);
-
-      if (plugin.owner_only && !isOwner) {
-        return await m.reply(config.mess.owner);
-      }
-      if (plugin.group_only && !isGroup) {
-        return await m.reply(config.mess.group);
-      }
-      if (plugin.private_only && !isPrivate) {
-        return await m.reply(config.mess.private);
-      }
-
-      const context = {
-        jid,
-        senderJid,
-        senderLid,
-        senderName,
-        command,
-        formattedLid,
-        senderNumber,
-        args,
-        usedPrefix,
-        isOwner,
-        isAdmin,
-        isBotAdmin,
-        isGroup,
-        isPrivate,
-        isBroadcast,
-        isChannel,
-      };
-
+    if (autoRead === true) {
       try {
-        await conn.sendPresenceUpdate("recording", jid);
-        await plugin.run(conn, m, context);
-        await conn.sendPresenceUpdate("available", jid);
-      } catch (err) {
-        console.error(`[EXEC ERROR] Command ${command}:`, err);
-        await m.reply("Terjadi kesalahan saat menjalankan perintah tersebut.");
+        await conn.readMessages([
+          m.key,
+        ]);
+      } catch (error) {
+        console.error(
+          "[READ ERROR]",
+          error
+        );
       }
-    } else if (isCmd && !plugins.has(command)) {
-      await conn.sendPresenceUpdate("recording", jid);
-      const allCommands = Array.from(plugins.keys());
-      const suggestion = findClosest(command, allCommands);
+    }
 
-      const text = suggestion
+    if (!isChannel) {
+      console.log(
+        "[NEW MESSAGE]",
+        logType,
+        `${chalk.yellow(senderName)} ${chalk.gray(
+          `(${senderNumber || "unknown"})`
+        )}\n${chalk.yellow(">")} ${mess}\n`
+      );
+    }
+
+    if (!isCmd) return;
+
+    const isSelf =
+      await getRuntimeValue(
+        "self"
+      );
+
+    if (
+      isSelf === true &&
+      !isOwner
+    ) {
+      return;
+    }
+
+    if (!plugins.has(command)) {
+      await conn.sendPresenceUpdate(
+        "recording",
+        jid
+      );
+
+      const allCommands =
+        Array.from(
+          plugins.keys()
+        );
+
+      const suggestion =
+        findClosest(
+          command,
+          allCommands
+        );
+
+      const errorText = suggestion
         ? `\`\`\`Command tidak ditemukan\`\`\`\n> Mungkin: ${usedPrefix}${suggestion}`
         : `\`\`\`Command tidak ditemukan\`\`\`\n> Ketik: ${usedPrefix}menu`;
 
       try {
         await new Button(conn)
           .setTitle("❌ Error 404")
-          .setBody(text)
-          .addButton("inapp_signup", {})
+          .setBody(errorText)
+          .addButton(
+            "inapp_signup",
+            {}
+          )
           .send(jid, {
             quoted: {
               key: {
                 fromMe: false,
-                participant: "0@s.whatsapp.net",
+                participant:
+                  "0@s.whatsapp.net",
+                remoteJid,
                 id: "PRODUCT123",
               },
               message: {
                 locationMessage: {
-                  degreesLatitude: -6.2,
-                  degreesLongitude: 106.816666,
-                  name: config.bot.name,
-                  address: "Jakarta, Indonesia",
+                  degreesLatitude:
+                    -6.2,
+                  degreesLongitude:
+                    106.816666,
+                  name:
+                    config.bot?.name ||
+                    "Bot",
+                  address:
+                    "Jakarta, Indonesia",
                 },
               },
             },
           });
 
-        await conn.sendPresenceUpdate("available", jid);
-      } catch (err) {
-        console.error("Gagal mengirim fake product:", err);
-        await m.reply(text);
+        await conn.sendPresenceUpdate(
+          "available",
+          jid
+        );
+      } catch (error) {
+        console.error(
+          "[FAKE PRODUCT ERROR]",
+          error
+        );
+
+        await m.reply(
+          errorText
+        );
+
+        await conn.sendPresenceUpdate(
+          "available",
+          jid
+        );
+      }
+
+      return;
+    }
+
+    const plugin =
+      plugins.get(command);
+
+    if (!plugin) return;
+
+    if (
+      plugin.owner_only &&
+      !isOwner
+    ) {
+      return m.reply(
+        config.mess?.owner ||
+          "Perintah ini hanya dapat digunakan oleh owner."
+      );
+    }
+
+    if (
+      plugin.group_only &&
+      !isGroup
+    ) {
+      return m.reply(
+        config.mess?.group ||
+          "Perintah ini hanya dapat digunakan di grup."
+      );
+    }
+
+    if (
+      plugin.private_only &&
+      !isPrivate
+    ) {
+      return m.reply(
+        config.mess?.private ||
+          "Perintah ini hanya dapat digunakan di private chat."
+      );
+    }
+
+    const context = {
+      jid,
+
+      remoteJid,
+
+      sender:
+        senderJid ||
+        senderLid ||
+        remoteJid,
+
+      senderJid,
+
+      senderLid,
+
+      senderName,
+
+      senderNumber,
+
+      botJid,
+
+      botLid,
+
+      botNumber,
+
+      command,
+
+      args,
+
+      arg: args.join(" "),
+
+      usedPrefix,
+
+      prefix: usedPrefix,
+
+      formattedLid,
+
+      isOwner,
+
+      isAdmin,
+
+      isBotAdmin,
+
+      isGroup,
+
+      isPrivate,
+
+      isBroadcast,
+
+      isChannel,
+
+      isFromMe: isMe,
+
+      isCmd,
+
+      type,
+
+      text: mess,
+
+      body,
+
+      quoted: quotedMessage,
+
+      mentionedJid,
+
+      groupMetadata,
+
+      participants,
+    };
+
+    try {
+      await conn.sendPresenceUpdate(
+        "recording",
+        jid
+      );
+
+      await plugin.run(
+        conn,
+        m,
+        context
+      );
+
+      await conn.sendPresenceUpdate(
+        "available",
+        jid
+      );
+    } catch (error) {
+      console.error(
+        `[EXEC ERROR] Command ${command}:`,
+        error
+      );
+
+      try {
+        await conn.sendPresenceUpdate(
+          "available",
+          jid
+        );
+      } catch {}
+
+      try {
+        await m.reply(
+          "Terjadi kesalahan saat menjalankan perintah tersebut."
+        );
+      } catch (replyError) {
+        console.error(
+          "[REPLY ERROR]",
+          replyError
+        );
       }
     }
   } catch (error) {
-    console.error("Terjadi kesalahan di handler pesan:", error);
+    console.error(
+      "Terjadi kesalahan di handler pesan:",
+      error
+    );
   }
 }

@@ -63,18 +63,417 @@ export async function handleMessage(conn, msg) {
     let command = "";
     let args = [];
 
-    const m = {
-      key: msg.key,
-      message: msg.message,
-      react: async (emoji) => {
-        await conn.sendMessage(remoteJid, {
-          react: { text: emoji, key: msg.key },
-        });
+    const getContentType = (message) => {
+  if (!message) return null;
+  return Object.keys(message)[0];
+};
+
+const unwrapMessage = (message) => {
+  if (!message) return null;
+
+  if (message.ephemeralMessage) {
+    return unwrapMessage(message.ephemeralMessage.message);
+  }
+
+  if (message.viewOnceMessage) {
+    return unwrapMessage(message.viewOnceMessage.message);
+  }
+
+  if (message.viewOnceMessageV2) {
+    return unwrapMessage(message.viewOnceMessageV2.message);
+  }
+
+  if (message.documentWithCaptionMessage) {
+    return unwrapMessage(message.documentWithCaptionMessage.message);
+  }
+
+  return message;
+};
+
+const getText = (message) => {
+  const msg = unwrapMessage(message);
+  if (!msg) return '';
+
+  return (
+    msg.conversation ||
+    msg.extendedTextMessage?.text ||
+    msg.imageMessage?.caption ||
+    msg.videoMessage?.caption ||
+    msg.documentMessage?.caption ||
+    msg.buttonsResponseMessage?.selectedButtonId ||
+    msg.listResponseMessage?.singleSelectReply?.selectedRowId ||
+    msg.templateButtonReplyMessage?.selectedId ||
+    msg.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson ||
+    ''
+  );
+};
+
+const getQuoted = (message) => {
+  const msg = unwrapMessage(message);
+
+  return (
+    msg?.extendedTextMessage?.contextInfo?.quotedMessage ||
+    msg?.imageMessage?.contextInfo?.quotedMessage ||
+    msg?.videoMessage?.contextInfo?.quotedMessage ||
+    msg?.documentMessage?.contextInfo?.quotedMessage ||
+    null
+  );
+};
+
+const getContextInfo = (message) => {
+  const msg = unwrapMessage(message);
+  if (!msg) return {};
+
+  const type = getContentType(msg);
+
+  return msg[type]?.contextInfo || {};
+};
+
+const content = unwrapMessage(msg.message);
+const type = getContentType(content);
+const contextInfo = getContextInfo(msg.message);
+
+const text = getText(msg.message).trim();
+
+const prefixMatch = text.match(/^[.!/#?]/);
+const prefix = prefixMatch?.[0] || '';
+
+const body = prefix
+  ? text.slice(prefix.length).trim()
+  : text;
+
+const parts = body.split(/\s+/).filter(Boolean);
+
+const command = parts.shift()?.toLowerCase() || '';
+
+const args = parts;
+
+const quotedMessage = getQuoted(msg.message);
+
+const m = {
+  chat: remoteJid,
+
+  sender:
+    senderJid ||
+    senderLid ||
+    remoteJid,
+
+  senderJid,
+
+  senderLid,
+
+  key: msg.key,
+
+  id: msg.key?.id,
+
+  message: msg.message,
+
+  raw: msg,
+
+  type,
+
+  content,
+
+  text,
+
+  body,
+
+  prefix,
+
+  command,
+
+  args,
+
+  arg: args.join(' '),
+
+  usedPrefix: prefix,
+
+  isCommand: Boolean(command),
+
+  isGroup:
+    remoteJid?.endsWith('@g.us') || false,
+
+  isPrivate:
+    !remoteJid?.endsWith('@g.us'),
+
+  isFromMe:
+    Boolean(msg.key?.fromMe),
+
+  contextInfo,
+
+  mentionedJid:
+    contextInfo?.mentionedJid || [],
+
+  quoted: quotedMessage,
+
+  hasQuoted:
+    Boolean(quotedMessage),
+
+  quotedType:
+    quotedMessage
+      ? getContentType(quotedMessage)
+      : null,
+
+  timestamp:
+    Number(msg.messageTimestamp || 0),
+
+  send: async (content, options = {}) => {
+    return conn.sendMessage(
+      remoteJid,
+      content,
+      options
+    );
+  },
+
+  reply: async (text, options = {}) => {
+    return conn.sendMessage(
+      remoteJid,
+      {
+        text: String(text),
+        ...options,
       },
-      reply: async (teks) => {
-        await conn.sendMessage(remoteJid, { text: teks }, { quoted: msg });
+      {
+        quoted: msg,
+      }
+    );
+  },
+
+  react: async (emoji) => {
+    return conn.sendMessage(
+      remoteJid,
+      {
+        react: {
+          text: emoji,
+          key: msg.key,
+        },
+      }
+    );
+  },
+
+  delete: async () => {
+    return conn.sendMessage(
+      remoteJid,
+      {
+        delete: msg.key,
+      }
+    );
+  },
+
+  edit: async (text) => {
+    return conn.sendMessage(
+      remoteJid,
+      {
+        text: String(text),
+        edit: msg.key,
+      }
+    );
+  },
+
+  isImage:
+    type === 'imageMessage',
+
+  isVideo:
+    type === 'videoMessage',
+
+  isAudio:
+    type === 'audioMessage',
+
+  isDocument:
+    type === 'documentMessage',
+
+  isSticker:
+    type === 'stickerMessage',
+
+  isMedia:
+    [
+      'imageMessage',
+      'videoMessage',
+      'audioMessage',
+      'documentMessage',
+      'stickerMessage',
+    ].includes(type),
+
+  media:
+    content?.[type] || null,
+
+  mimetype:
+    content?.[type]?.mimetype || null,
+
+  fileName:
+    content?.[type]?.fileName || null,
+
+  caption:
+    content?.[type]?.caption || null,
+
+  mentions:
+    contextInfo?.mentionedJid || [],
+
+  isMentioned: (jid) => {
+    return (
+      contextInfo?.mentionedJid || []
+    ).includes(jid);
+  },
+
+  quotedText:
+    quotedMessage
+      ? getText(quotedMessage)
+      : '',
+
+  quotedContent:
+    quotedMessage
+      ? unwrapMessage(quotedMessage)
+      : null,
+
+  quotedSender:
+    contextInfo?.participant || null,
+
+  sendText: async (text, options = {}) => {
+    return conn.sendMessage(
+      remoteJid,
+      {
+        text: String(text),
+        ...options,
       },
-    };
+      {
+        quoted: msg,
+      }
+    );
+  },
+
+  sendImage: async (
+    image,
+    caption = '',
+    options = {}
+  ) => {
+    return conn.sendMessage(
+      remoteJid,
+      {
+        image,
+        caption,
+        ...options,
+      },
+      {
+        quoted: msg,
+      }
+    );
+  },
+
+  sendVideo: async (
+    video,
+    caption = '',
+    options = {}
+  ) => {
+    return conn.sendMessage(
+      remoteJid,
+      {
+        video,
+        caption,
+        ...options,
+      },
+      {
+        quoted: msg,
+      }
+    );
+  },
+
+  sendAudio: async (
+    audio,
+    options = {}
+  ) => {
+    return conn.sendMessage(
+      remoteJid,
+      {
+        audio,
+        ...options,
+      },
+      {
+        quoted: msg,
+      }
+    );
+  },
+
+  sendDocument: async (
+    document,
+    fileName,
+    mimetype,
+    options = {}
+  ) => {
+    return conn.sendMessage(
+      remoteJid,
+      {
+        document,
+        fileName,
+        mimetype,
+        ...options,
+      },
+      {
+        quoted: msg,
+      }
+    );
+  },
+
+  sendSticker: async (
+    sticker,
+    options = {}
+  ) => {
+    return conn.sendMessage(
+      remoteJid,
+      {
+        sticker,
+        ...options,
+      },
+      {
+        quoted: msg,
+      }
+    );
+  },
+
+  typing: async () => {
+    return conn.sendPresenceUpdate(
+      'composing',
+      remoteJid
+    );
+  },
+
+  recording: async () => {
+    return conn.sendPresenceUpdate(
+      'recording',
+      remoteJid
+    );
+  },
+
+  pause: async () => {
+    return conn.sendPresenceUpdate(
+      'paused',
+      remoteJid
+    );
+  },
+
+  getGroupMetadata: async () => {
+    if (!m.isGroup) return null;
+
+    return conn.groupMetadata(remoteJid);
+  },
+
+  hasArgs: (amount = 1) => {
+    return args.length >= amount;
+  },
+
+  getArg: (index) => {
+    return args[index];
+  },
+
+  getArgs: (start = 0) => {
+    return args.slice(start);
+  },
+
+  getMention: (index = 0) => {
+    return (
+      contextInfo?.mentionedJid?.[index] ||
+      null
+    );
+  },
+};
 
     const ids = [
       m.key.participant,

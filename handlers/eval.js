@@ -9,7 +9,8 @@ import {
   Toolkit,
 } from "../utils/MessageBuilderV4.7.js";
 
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const AsyncFunction =
+  Object.getPrototypeOf(async function () {}).constructor;
 
 export async function handleEval(
   conn,
@@ -32,7 +33,9 @@ export async function handleEval(
   isBroadcast,
   isChannel,
 ) {
-  if (!isOwner) return;
+  if (!isOwner) {
+    return;
+  }
 
   const isAsync = body.startsWith("=>");
   const prefixLength = isAsync ? 2 : 1;
@@ -97,6 +100,13 @@ export async function handleEval(
         "isPrivate",
         "isBroadcast",
         "isChannel",
+        "config",
+        "VERSION",
+        "Button",
+        "ButtonV2",
+        "Carousel",
+        "AIRich",
+        "Toolkit",
         code,
       );
 
@@ -119,6 +129,13 @@ export async function handleEval(
         isPrivate,
         isBroadcast,
         isChannel,
+        config,
+        VERSION,
+        Button,
+        ButtonV2,
+        Carousel,
+        AIRich,
+        Toolkit,
       );
     } else {
       result = eval(code);
@@ -127,7 +144,7 @@ export async function handleEval(
     let output = "";
 
     if (logs.length > 0) {
-      output += logs.join("\n");
+      output = logs.join("\n");
     }
 
     if (result !== undefined) {
@@ -168,3 +185,4 @@ export async function handleEval(
     console.info = originalConsole.info;
   }
 }
+

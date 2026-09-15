@@ -1,4 +1,13 @@
 import util from "util";
+import config from "../config.js";
+import {
+  VERSION,
+  Button,
+  ButtonV2,
+  Carousel,
+  AIRich,
+  Toolkit,
+} from "../utils/MessageBuilderV4.7.js";
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 

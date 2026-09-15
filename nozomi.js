@@ -303,14 +303,15 @@ async function start() {
 
   connectToWhatsApp();
 
-  pluginPromise
+  await pluginPromise
     .then(() => {
       console.log(chalk.green("Plugins loaded successfully."));
     })
     .catch((error) => {
       console.error(chalk.red("Failed to load plugins:"), error);
     });
+
+  checkForUpdates();
 }
 
-checkForUpdates();
 start();

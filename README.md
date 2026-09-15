@@ -155,6 +155,11 @@ export default {
   // false = Pairing Code, true = QR Code
   pairingWithQr: false,
 
+  sessionDir: "nozomi_session", // session directory name
+
+  syncFullHistory: false,
+  checkForUpdates: true, // toggle update notification
+
   // Disable only if absolutely necessary
   ignore_self: true,
 

@@ -107,6 +107,45 @@ export default {
 
 <br>
 
+## > Auto Reload
+
+You can enable automatic file reloading by registering the file with `registerAutoReload()`.
+
+```javascript
+import { registerAutoReload } from "<PATH to filesWatcher.js>";
+
+registerAutoReload(import.meta.url);
+```
+
+`import.meta.url` automatically identifies the current file, so you do not need to specify the file path manually.
+
+For example, in a plugin:
+
+```javascript
+import { registerAutoReload } from "../utils/filesWatcher.js";
+
+registerAutoReload(import.meta.url);
+
+export default {
+  name: "ping",
+  command: ["ping"],
+  category: "main",
+  description: "Simple ping command",
+  owner_only: false,
+  private_only: false,
+  group_only: false,
+
+  async run(conn, m) {
+    return m.reply("pong");
+  },
+};
+```
+
+> **Note:** Any changes made to a registered file will be detected automatically and the module will be reloaded without restarting the bot.
+
+
+<br>
+
 ## > Configuration Example
 
 ```javascript

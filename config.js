@@ -1,6 +1,4 @@
 import packageFile from "./package.json" with { type: "json" };
-import { registerAutoReload } from "./utils/filesWatcher.js";
-registerAutoReload(import.meta.url);
 
 
 export default {

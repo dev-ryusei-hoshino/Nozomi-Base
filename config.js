@@ -1,5 +1,31 @@
-import packageFile from "./package.json" with { type: "json" };
+/*
+╭──────────────────────────────────────────────────────────╮
+│                      COPYRIGHT NOTICE                    │
+╰──────────────────────────────────────────────────────────╯
 
+[ INDONESIA ]
+  Dilarang memperjualbelikan base bot original tanpa perubahan
+  atau modifikasi apa pun. Jika ingin menjual script ini, Anda
+  sangat dianjurkan untuk menghubungi author terlebih dahulu
+  guna memperoleh persetujuan dan menghindari kesalahpahaman.
+
+[ ENGLISH ]
+  Reselling the original bot base without any modifications
+  is prohibited. If you intend to sell this script, you are
+  strongly encouraged to contact the original author beforehand
+  to obtain approval and avoid any potential misunderstandings.
+
+[ 日本語 ]
+  変更・改変を一切加えていないオリジナルのボットベースを
+  転売することは禁止されています。このスクリプトを販売
+  する場合は、事前に作者へ連絡し、許可を得ることを強く
+  推奨します。誤解やトラブルを避けるため、ご協力ください。
+
+╭──────────────────────────────────────────────────────────╮
+│          Respect the author's work and effort.           │
+╰──────────────────────────────────────────────────────────╯
+*/
+import packageFile from "./package.json" with { type: "json" };
 
 export default {
   pairingWithQr: false,

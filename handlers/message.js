@@ -5,6 +5,7 @@ import { Button } from "../utils/MessageBuilderV4.7.js";
 import chalk from "chalk";
 import { handleExec } from "./exec.js";
 import { handleEval } from "./eval.js";
+import { handleButton } from "./button.js";
 
 function getDistance(a, b) {
   const matrix = Array.from({ length: a.length + 1 }, () => []);
@@ -863,6 +864,16 @@ export async function handleMessage(conn, msg) {
     }
 
     if (!isCmd) {
+      const hasInteractive =
+        content?.interactiveResponseMessage ||
+        content?.templateButtonReplyMessage ||
+        content?.buttonsResponseMessage ||
+        content?.listResponseMessage;
+
+      if (hasInteractive) {
+        await handleButton(conn, m);
+      }
+
       return;
     }
 

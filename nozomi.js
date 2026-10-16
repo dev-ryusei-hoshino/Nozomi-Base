@@ -186,7 +186,7 @@ async function connectToWhatsApp() {
     const conn = makeWASocket({
       auth: state,
       printQRInTerminal: config.pairingWithQr,
-      browser: Browsers.macOS("Safari"),
+      browser: ["Android", "Chrome", "1.0.0"],
       logger: Pino({ level: "silent" }),
       markOnlineOnConnect: config.bot.markOnlineOnConnect,
       syncFullHistory: config.syncFullHistory,
@@ -271,14 +271,27 @@ async function connectToWhatsApp() {
 
     conn.ev.on("creds.update", saveCreds);
 
-    conn.ev.on("messages.upsert", async ({ messages }) => {
+    conn.ev.on("messages.upsert", async ({ messages, type }) => {
+      const now = Math.floor(Date.now() / 1000);
+
       for (const msg of messages) {
+        if (
+          config.syncFullHistory === false &&
+          Number(msg?.messageTimestamp || 0) < now - 60
+        ) {
+          continue;
+        }
+
         try {
           await handleMessage(conn, msg);
         } catch (error) {
           console.error("Message handler error:", error);
         }
       }
+    });
+
+    conn.ev.on("messaging-history.set", async () => {
+      return;
     });
   } catch (error) {
     connecting = false;
